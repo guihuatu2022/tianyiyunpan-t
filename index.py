@@ -138,6 +138,18 @@ def login(username, password):
         print(f"⚠️ 登录异常：{str(e)}")
         return None
 
+def translate_error(code):
+    """将错误码翻译为中文提示"""
+    error_map = {
+        "User_Not_Chance": "今日已无抽奖机会",
+        "ERROR_USER_NOT_SIGN_IN": "未签到，无法抽奖",
+        "SYSTEM_ERROR": "系统错误，请稍后再试",
+        "INVALID_TOKEN": "登录已过期",
+        "FREQUENCY_LIMIT": "操作过于频繁，请稍后再试"
+    }
+    # 查找对应的中文翻译，没有则返回原始错误码
+    return error_map.get(code, code)
+
 def send_wxpusher(msg):
     """发送消息到WxPusher"""
     # 从环境变量获取WxPusher配置
@@ -269,7 +281,9 @@ def process_account(username, password, interval):
         response = session.get(lottery_url, headers=headers).json()
         
         if "errorCode" in response:
-            account_result["lottery"] = f"❌ {response.get('errorCode')}"
+            # 翻译错误码为中文
+            error_msg = translate_error(response.get('errorCode'))
+            account_result["lottery"] = f"❌ {error_msg}"
         else:
             prize = response.get('prizeName') or response.get('description', '未知奖品')
             account_result["lottery"] = f"🎁 {prize}"
@@ -338,14 +352,23 @@ def main_handler(event, context):
         remaining = MAX_TOTAL_TIME - elapsed
         print(f"⏳ 已用时：{int(elapsed)}秒，剩余时间：{int(remaining)}秒")
     
-    # 生成汇总表格
-    table = "### ⛅ 天翼云盘签到汇总\n\n"
-    table += "| 账号 | 签到时间 | 签到结果 | 每日抽奖 |\n"
-    table += "|:-:|:-:|:-:|:-:|\n"
-    for res in all_results:
-        table += f"| {res['username']} | {res['time'] or '-'} | {res['sign']} | {res['lottery'] or '-'} |\n"
+    # 生成汇总表格（使用HTML表格优化显示效果）
+    table = f"<h3>天翼云盘签到汇总 {time.strftime('%Y-%m-%d')}</h3>"
+    table += "<table border='1' cellpadding='8' style='border-collapse:collapse;'>"
+    table += "<tr bgcolor='#f0f0f0'>"
+    table += "<th>账号</th><th>签到时间</th><th>签到结果</th><th>每日抽奖</th>"
+    table += "</tr>"
     
-    # 发送通知
+    for res in all_results:
+        table += "<tr>"
+        table += f"<td>{res['username']}</td>"
+        table += f"<td>{res['time'] or '-'}</td>"
+        table += f"<td>{res['sign']}</td>"
+        table += f"<td>{res['lottery'] or '-'}</td>"
+        table += "</tr>"
+    table += "</table>"
+    
+    # 发送通知（使用HTML格式）
     send_wxpusher(table)
     send_email(table)
     
